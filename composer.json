@@ -1,0 +1,8 @@
+{
+  "name": "prodigito/mautic-woo-connect",
+  "description": "Integração entre WooCommerce e Mautic",
+  "require": {
+    "mautic/api-library": "^3.0",
+    "psr/log": "^2.0"
+  }
+}

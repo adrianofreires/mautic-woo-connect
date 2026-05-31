@@ -1,14 +1,21 @@
 <?php
 /**
  * Plugin Name: Mautic Woo Connect
- * Description: Integração entre WooCommerce e Mautic.
+ * Plugin URI: https://prodigito.com.br
+ * Description: Integração avançada de inteligência e performance entre WooCommerce e Mautic. Sincronização bidirecional, cálculos RFM em tempo real e rastreamento comportamental dinâmico.
  * Version: 1.0.0
  * Author: Prodígito
+ * Author URI: https://prodigito.com.br
+ * License: GPL v2 or later
+ * Text Domain: mautic-woo-connect
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
     exit; // Segurança: Evita acesso direto ao arquivo
 }
+
+// 1. O 'use' fica solto aqui no topo, fora de qualquer if!
+use YahnisElsts\PluginUpdateChecker\v5\PucFactory;
 
 // Carrega o autoloader do Composer para a API do Mautic
 if ( file_exists( __DIR__ . '/vendor/autoload.php' ) ) {
@@ -19,7 +26,26 @@ if ( file_exists( __DIR__ . '/vendor/autoload.php' ) ) {
 define( 'MWC_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'MWC_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 
-// Carrega as classes (vamos criá-las no próximo passo)
+// ==============================================================================
+// 🚀 SISTEMA DE ATUALIZAÇÃO AUTOMÁTICA (OTA VIA GITHUB)
+// ==============================================================================
+// Verifica se a biblioteca foi baixada e colocada na pasta do plugin
+if ( file_exists( MWC_PLUGIN_DIR . 'plugin-update-checker/plugin-update-checker.php' ) ) {
+    require_once MWC_PLUGIN_DIR . 'plugin-update-checker/plugin-update-checker.php';
+
+    // 2. Aqui a gente só chama a classe PucFactory direto, pois ela já foi importada lá em cima
+    $mwcUpdateChecker = PucFactory::buildUpdateChecker(
+        'https://github.com/adrianofreires/mautic-woo-connect/',
+        __FILE__,
+        'mautic-woo-connect'
+    );
+
+    // Define a branch principal
+    $mwcUpdateChecker->setBranch('main');
+}
+// ==============================================================================
+
+// Carrega as classes
 require_once MWC_PLUGIN_DIR . 'includes/class-mwc-admin.php';
 require_once MWC_PLUGIN_DIR . 'includes/class-mwc-auth.php';
 require_once MWC_PLUGIN_DIR . 'includes/class-mwc-scheduler.php';

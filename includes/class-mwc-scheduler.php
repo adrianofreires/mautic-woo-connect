@@ -25,43 +25,54 @@ class MWC_Scheduler {
         }
     }
 
-    /**
-     * O Motor do Algoritmo RFM
-     * Calcula as notas do cliente com base no histórico real do banco de dados
-     */
     private function calculate_rfm( $email ) {
-        // Puxa os status salvos nas configurações ou usa os status de "pago" nativos do Woo como padrão
-        $valid_statuses = get_option( 'mwc_valid_order_statuses', wc_get_is_paid_statuses() );
+        global $wpdb;
 
-        $selected_statuses = get_option('mwc_valid_order_statuses', ['wc-processing', 'wc-completed']);
-        $clean_statuses = array_map(function($status) { return str_replace('wc-', '', $status); }, $selected_statuses);
+        // Status no formato salvo no banco (com prefixo wc-).
+        $statuses = get_option( 'mwc_valid_order_statuses', [ 'wc-processing', 'wc-completed' ] );
+        if ( ! is_array( $statuses ) || empty( $statuses ) ) {
+            $statuses = [ 'wc-processing', 'wc-completed' ];
+        }
+        $placeholders = implode( ',', array_fill( 0, count( $statuses ), '%s' ) );
 
-        $orders = wc_get_orders( [
-            'billing_email' => $email,
-            'status'        => $clean_statuses,
-            'limit'         => -1,
-        ] );
+        $hpos = class_exists( '\Automattic\WooCommerce\Utilities\OrderUtil' )
+            && \Automattic\WooCommerce\Utilities\OrderUtil::custom_orders_table_usage_is_enabled();
 
-        $frequency = count( $orders );
-        $monetary  = 0;
-        $recency   = 9999;
-
-        if ( $frequency > 0 ) {
-            // Pegamos o primeiro item do array (o pedido mais recente na posição 0)
-            $last_order_date = $orders[0]->get_date_created(); 
-            
-            if ( $last_order_date ) {
-                $now = new DateTime();
-                $last_order = new DateTime( $last_order_date->date( 'Y-m-d H:i:s' ) );
-                $recency = $now->diff( $last_order )->days; // Dias desde a última compra
-            }
+        if ( $hpos ) {
+            $sql = "SELECT COUNT(*) AS freq,
+                        COALESCE(SUM(total_amount), 0) AS monetary,
+                        MAX(date_created_gmt) AS last_date
+                    FROM {$wpdb->prefix}wc_orders
+                    WHERE billing_email = %s
+                    AND type = 'shop_order'
+                    AND status IN ($placeholders)";
+        } else {
+            $sql = "SELECT COUNT(p.ID) AS freq,
+                        COALESCE(SUM(pm_total.meta_value), 0) AS monetary,
+                        MAX(p.post_date_gmt) AS last_date
+                    FROM {$wpdb->prefix}posts p
+                    INNER JOIN {$wpdb->prefix}postmeta pm_email
+                            ON p.ID = pm_email.post_id AND pm_email.meta_key = '_billing_email'
+                    INNER JOIN {$wpdb->prefix}postmeta pm_total
+                            ON p.ID = pm_total.post_id AND pm_total.meta_key = '_order_total'
+                    WHERE p.post_type = 'shop_order'
+                    AND pm_email.meta_value = %s
+                    AND p.post_status IN ($placeholders)";
         }
 
-        foreach ( $orders as $o ) {
-            $monetary += $o->get_total(); // Soma o LTV (Lifetime Value)
+        $params = array_merge( [ $email ], $statuses );
+        $row    = $wpdb->get_row( $wpdb->prepare( $sql, ...$params ) );
+
+        $frequency = $row ? (int) $row->freq : 0;
+        $monetary  = $row ? (float) $row->monetary : 0;
+
+        $recency = 9999;
+        if ( $frequency > 0 && ! empty( $row->last_date ) ) {
+            $recency = (int) floor( ( time() - strtotime( $row->last_date . ' UTC' ) ) / DAY_IN_SECONDS );
+            if ( $recency < 0 ) { $recency = 0; }
         }
 
-        // Tabela de Pontuação (Score de 1 a 5)
+        // Faixas idênticas às anteriores (pra validação bater).
         $r_score = 1;
         if ( $recency <= 30 ) $r_score = 5;
         elseif ( $recency <= 90 ) $r_score = 4;
@@ -85,7 +96,7 @@ class MWC_Scheduler {
             'frequency_score' => $f_score,
             'monetary_score'  => $m_score,
             'ltv'             => $monetary,
-            'total_pedidos'   => $frequency
+            'total_pedidos'   => $frequency,
         ];
     }
 

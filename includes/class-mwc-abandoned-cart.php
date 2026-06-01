@@ -43,7 +43,7 @@ class MWC_Abandoned_Cart {
         // REDE DE SEGURANÇA: Captura erros fatais e transforma em resposta JSON
         try {
             // 1. Gera um Cupom Único de 10% válido por 2 dias
-            $coupon_code = $this->generate_recovery_coupon( $email );
+            $coupon_code = $this->get_or_create_recovery_coupon( $email );
 
             // 2. Pega a URL do Carrinho (Para link de recuperação mágica no e-mail)
             $cart_url = wc_get_cart_url();
@@ -77,26 +77,39 @@ class MWC_Abandoned_Cart {
     }
 
     /**
-     * Motor de Geração de Cupom Dinâmico
-     */
-    private function generate_recovery_coupon( $email ) {
-        $coupon_code = 'VOLTA-' . strtoupper( substr( md5( $email . time() ), 0, 6 ) );
-        
-        $coupon = new WC_Coupon();
-        $coupon->set_code( $coupon_code );
-        $coupon->set_discount_type( 'percent' );
-        $discount_amount = get_option( 'mwc_recovery_discount', 10 );
-        $coupon->set_amount( $discount_amount );
-        $coupon->set_usage_limit( 1 ); // Pode ser usado apenas 1 vez
-        $coupon->set_email_restrictions( [ $email ] ); 
-        
-        // CORREÇÃO: O método correto no WooCommerce moderno
-        if ( is_callable( [$coupon, 'set_date_expires'] ) ) {
-            $coupon->set_date_expires( strtotime( '+2 days' ) ); 
+ * Retorna o cupom de recuperação do e-mail, reaproveitando se já existir um válido.
+ * Idempotente: evita criar cupons duplicados a cada captura.
+ */
+private function get_or_create_recovery_coupon( $email ) {
+    $cache_key = 'mwc_recovery_coupon_' . md5( $email );
+
+    // Já existe um cupom de recuperação para este e-mail? Reaproveita.
+    $existing_code = get_transient( $cache_key );
+    if ( $existing_code ) {
+        // Confirma que o cupom ainda existe no banco (pode ter sido apagado à mão).
+        if ( wc_get_coupon_id_by_code( $existing_code ) ) {
+            return $existing_code;
         }
-
-        $coupon->save();
-
-        return $coupon_code;
+        delete_transient( $cache_key ); // sumiu: limpa o cache e cria um novo
     }
+
+    $coupon_code = 'VOLTA-' . strtoupper( substr( md5( $email . time() ), 0, 6 ) );
+
+    $coupon = new WC_Coupon();
+    $coupon->set_code( $coupon_code );
+    $coupon->set_discount_type( 'percent' );
+    $coupon->set_amount( (float) get_option( 'mwc_recovery_discount', 10 ) );
+    $coupon->set_usage_limit( 1 );
+    $coupon->set_email_restrictions( [ $email ] );
+
+    if ( is_callable( [ $coupon, 'set_date_expires' ] ) ) {
+        $coupon->set_date_expires( strtotime( '+2 days' ) );
+    }
+    $coupon->save();
+
+    // Mapeia e-mail → cupom pelo mesmo período de validade (2 dias).
+    set_transient( $cache_key, $coupon_code, 2 * DAY_IN_SECONDS );
+
+    return $coupon_code;
+}
 }

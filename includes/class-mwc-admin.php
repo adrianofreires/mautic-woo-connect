@@ -382,6 +382,7 @@ class MWC_Admin {
                 <p>Use esta ferramenta apenas uma vez para processar os clientes do passado via Action Scheduler.</p>
                 <form action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" method="post">
                     <input type="hidden" name="action" value="mwc_run_bulk_sync">
+                    <?php wp_nonce_field( 'mwc_bulk_sync_action', 'mwc_bulk_sync_nonce' ); ?>
                     <?php submit_button( 'Iniciar Bulk Sync', 'secondary', 'submit', false, ['style' => 'width:100%'] ); ?>
                 </form>
             </div>

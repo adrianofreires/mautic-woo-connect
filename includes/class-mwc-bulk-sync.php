@@ -21,6 +21,9 @@ class MWC_Bulk_Sync {
             wp_die( 'Acesso negado.' );
         }
 
+        // Verifica o nonce: garante que a requisição partiu do formulário legítimo (anti-CSRF).
+        check_admin_referer( 'mwc_bulk_sync_action', 'mwc_bulk_sync_nonce' );
+
         // Puxa os status salvos nas configurações ou usa os status de "pago" nativos do Woo como padrão
         $valid_statuses = get_option( 'mwc_valid_order_statuses', wc_get_is_paid_statuses() );
 

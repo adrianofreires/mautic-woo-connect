@@ -5,60 +5,83 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class MWC_Bulk_Sync {
 
+    const BATCH_SIZE = 100;
+
     public function __construct() {
-        // Escuta o clique do botão no painel de administração
         add_action( 'admin_post_mwc_run_bulk_sync', [ $this, 'process_bulk_sync_request' ] );
-        
-        // Exibe a notificação de sucesso
+        add_action( 'mwc_bulk_sync_page', [ $this, 'process_bulk_sync_page' ], 10, 1 );
         add_action( 'admin_notices', [ $this, 'display_bulk_sync_notice' ] );
     }
 
     /**
-     * Pega todos os pedidos antigos e os coloca na fila de processamento assíncrono
+     * Clique no botão: só dispara a primeira página. Nada de loop pesado aqui
+     * (era o que dava timeout em lojas grandes).
      */
     public function process_bulk_sync_request() {
         if ( ! current_user_can( 'manage_options' ) ) {
             wp_die( 'Acesso negado.' );
         }
-
-        // Verifica o nonce: garante que a requisição partiu do formulário legítimo (anti-CSRF).
         check_admin_referer( 'mwc_bulk_sync_action', 'mwc_bulk_sync_nonce' );
 
-        // Puxa os status salvos nas configurações ou usa os status de "pago" nativos do Woo como padrão
-        $valid_statuses = get_option( 'mwc_valid_order_statuses', wc_get_is_paid_statuses() );
-
-        $orders = wc_get_orders( [
-            'status' => $valid_statuses,
-            'limit'  => -1, 
-            'return' => 'ids', 
-        ] );
-
-        if ( ! empty( $orders ) && function_exists( 'as_enqueue_async_action' ) ) {
-            $count = 0;
-            foreach ( $orders as $order_id ) {
-                // Previne que um mesmo pedido seja adicionado na fila duas vezes
-                if ( ! as_has_scheduled_action( 'mwc_process_mautic_contact_sync', [ 'order_id' => $order_id ], 'mwc_integration' ) ) {
-                    as_enqueue_async_action( 'mwc_process_mautic_contact_sync', [ 'order_id' => $order_id ], 'mwc_integration' );
-                    $count++;
-                }
-            }
-            // Salva a quantidade de itens enfileirados para mostrar na notificação
-            update_option( 'mwc_bulk_sync_notice', $count );
+        if ( ! function_exists( 'as_enqueue_async_action' ) ) {
+            wp_die( 'Action Scheduler indisponível.' );
         }
 
-        // Redireciona o lojista de volta para a página de configurações
+        // Contagem barata só para a notificação (paginate traz o total sem carregar tudo).
+        $count_query = wc_get_orders( [
+            'status'   => $this->get_valid_statuses(),
+            'limit'    => 1,
+            'paginate' => true,
+            'return'   => 'ids',
+        ] );
+        $total = isset( $count_query->total ) ? (int) $count_query->total : 0;
+
+        update_option( 'mwc_bulk_sync_notice', $total );
+
+        // Dispara a página 1; ela se reagenda sozinha até acabar.
+        as_enqueue_async_action( 'mwc_bulk_sync_page', [ 'page' => 1 ], 'mwc_integration' );
+
         wp_redirect( admin_url( 'admin.php?page=mwc-settings' ) );
         exit;
     }
 
     /**
-     * Exibe o aviso verde no painel informando quantos pedidos entraram na fila
+     * Processa um lote de pedidos e reagenda a próxima página (cursor).
      */
+    public function process_bulk_sync_page( $page = 1 ) {
+        $page = max( 1, (int) $page );
+
+        $order_ids = wc_get_orders( [
+            'status'  => $this->get_valid_statuses(),
+            'limit'   => self::BATCH_SIZE,
+            'paged'   => $page,
+            'orderby' => 'date',
+            'order'   => 'DESC',
+            'return'  => 'ids',
+        ] );
+
+        if ( empty( $order_ids ) ) {
+            return; // fim natural da paginação
+        }
+
+        foreach ( $order_ids as $order_id ) {
+            // Sem checagem prévia (era o gargalo): o sync é um upsert idempotente no Mautic.
+            as_enqueue_async_action( 'mwc_process_mautic_contact_sync', [ 'order_id' => $order_id ], 'mwc_integration' );
+        }
+
+        as_enqueue_async_action( 'mwc_bulk_sync_page', [ 'page' => $page + 1 ], 'mwc_integration' );
+    }
+
     public function display_bulk_sync_notice() {
         $count = get_option( 'mwc_bulk_sync_notice' );
         if ( $count !== false ) {
-            echo '<div class="notice notice-success is-dismissible"><p><strong>Sincronização em Massa Iniciada!</strong> ' . intval($count) . ' pedidos históricos foram adicionados à fila de processamento (Action Scheduler). Eles serão enviados ao Mautic silenciosamente em segundo plano nas próximas horas.</p></div>';
+            echo '<div class="notice notice-success is-dismissible"><p><strong>Sincronização em Massa Iniciada!</strong> ' . intval( $count ) . ' pedidos históricos serão processados em segundo plano (Action Scheduler), em lotes, ao longo das próximas horas.</p></div>';
             delete_option( 'mwc_bulk_sync_notice' );
         }
+    }
+
+    private function get_valid_statuses() {
+        $statuses = get_option( 'mwc_valid_order_statuses', [ 'wc-processing', 'wc-completed' ] );
+        return ( is_array( $statuses ) && ! empty( $statuses ) ) ? $statuses : [ 'wc-processing', 'wc-completed' ];
     }
 }

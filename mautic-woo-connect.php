@@ -58,6 +58,7 @@ if ( file_exists( MWC_PLUGIN_DIR . 'plugin-update-checker/plugin-update-checker.
 // ==============================================================================
 
 // Carrega as classes
+require_once MWC_PLUGIN_DIR . 'includes/class-mwc-token-manager.php';
 require_once MWC_PLUGIN_DIR . 'includes/class-mwc-admin.php';
 require_once MWC_PLUGIN_DIR . 'includes/class-mwc-auth.php';
 require_once MWC_PLUGIN_DIR . 'includes/class-mwc-scheduler.php';

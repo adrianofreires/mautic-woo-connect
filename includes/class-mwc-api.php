@@ -30,14 +30,19 @@ class MWC_Api {
         // Recupera os dados (que agora temos certeza que estão atualizados)
         $accessTokenData = get_option( 'mwc_access_token_data' );
 
+        // Normaliza o timestamp de expiração: a lib espera 'expires' (absoluto), mas o
+        // refresh manual salva 'created_at' + 'expires_in'. Calcula um fallback seguro.
+        $token_expires = $accessTokenData['expires']
+            ?? ( ( $accessTokenData['created_at'] ?? time() ) + ( $accessTokenData['expires_in'] ?? 3600 ) );
+
         $settings = [
             'baseUrl'      => $this->api_url,
             'version'      => 'OAuth2',
             'clientKey'    => get_option('mwc_client_id'),
             'clientSecret' => get_option('mwc_client_secret'),
-            'accessToken'  => $accessTokenData['access_token'],
-            'refreshToken' => $accessTokenData['refresh_token'],
-            'tokenExpires' => $accessTokenData['expires']
+            'accessToken'  => $accessTokenData['access_token'] ?? '',
+            'refreshToken' => $accessTokenData['refresh_token'] ?? '',
+            'tokenExpires' => $token_expires,
         ];
 
         $initAuth = new ApiAuth();

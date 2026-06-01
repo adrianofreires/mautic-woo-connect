@@ -26,6 +26,17 @@ if ( file_exists( __DIR__ . '/vendor/autoload.php' ) ) {
 define( 'MWC_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'MWC_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 
+// Declara compatibilidade com HPOS (High-Performance Order Storage) do WooCommerce
+add_action( 'before_woocommerce_init', function () {
+    if ( class_exists( \Automattic\WooCommerce\Utilities\FeaturesUtil::class ) ) {
+        \Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility(
+            'custom_order_tables',
+            __FILE__,
+            true
+        );
+    }
+} );
+
 // ==============================================================================
 // 🚀 SISTEMA DE ATUALIZAÇÃO AUTOMÁTICA (OTA VIA GITHUB)
 // ==============================================================================
@@ -57,7 +68,15 @@ require_once MWC_PLUGIN_DIR . 'includes/class-mwc-dwc.php';
 require_once MWC_PLUGIN_DIR . 'includes/class-mwc-webhook.php';
 
 // Inicializa a interface de Administração
-add_action( 'plugins_loaded', function() {
+add_action( 'plugins_loaded', function () {
+    // Sem WooCommerce, o plugin não tem o que fazer e usaria funções inexistentes (fatal).
+    if ( ! class_exists( 'WooCommerce' ) ) {
+        add_action( 'admin_notices', function () {
+            echo '<div class="notice notice-error"><p><strong>Mautic Woo Connect:</strong> requer o WooCommerce instalado e ativo.</p></div>';
+        } );
+        return;
+    }
+
     new MWC_Admin();
     new MWC_Auth();
     new MWC_Scheduler();
@@ -67,4 +86,4 @@ add_action( 'plugins_loaded', function() {
     new MWC_Bulk_Sync();
     new MWC_DWC();
     new MWC_Webhook();
-});
+} );

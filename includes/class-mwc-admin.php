@@ -17,15 +17,23 @@ class MWC_Admin {
      * Carrega estilos e scripts apenas na nossa página de configurações
      */
     public function enqueue_admin_assets( $hook ) {
-        // Garante que só vai carregar na página do nosso plugin
-        if ( $hook !== 'toplevel_page_mwc-settings' ) {
-            return;
-        }
-
-        // Carrega o Select2 (SelectWoo) nativo do WooCommerce
-        wp_enqueue_style( 'woocommerce_admin_styles', WC()->plugin_url() . '/assets/css/admin.css' );
-        wp_enqueue_script( 'selectWoo' );
+    if ( $hook !== 'toplevel_page_mwc-settings' ) {
+        return;
     }
+
+    // Select2 (SelectWoo) nativo do WooCommerce
+    wp_enqueue_style( 'woocommerce_admin_styles', WC()->plugin_url() . '/assets/css/admin.css' );
+    wp_enqueue_script( 'selectWoo' );
+
+    // CSS próprio do admin do plugin
+    $css_path = MWC_PLUGIN_DIR . 'assets/css/admin.css';
+    wp_enqueue_style(
+        'mwc-admin',
+        MWC_PLUGIN_URL . 'assets/css/admin.css',
+        [],
+        file_exists( $css_path ) ? filemtime( $css_path ) : MWC_VERSION
+    );
+}
 
     public function add_admin_menu() {
         // String limpa em 1 linha, usando viewBox apropriado e paths preenchidos sem bordas (stroke)
@@ -240,16 +248,6 @@ class MWC_Admin {
         $selected_statuses = get_option('mwc_valid_order_statuses', ['wc-processing', 'wc-completed']);
         if (!is_array($selected_statuses)) $selected_statuses = [];
         ?>
-        
-        <style>
-            .mwc-switch { position: relative; display: inline-block; width: 44px; height: 24px; vertical-align: middle; }
-            .mwc-switch input { opacity: 0; width: 0; height: 0; }
-            .mwc-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 24px; }
-            .mwc-slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
-            .mwc-switch input:checked + .mwc-slider { background-color: #2271b1; }
-            .mwc-switch input:focus + .mwc-slider { box-shadow: 0 0 1px #2271b1; }
-            .mwc-switch input:checked + .mwc-slider:before { transform: translateX(20px); }
-        </style>
 
         <div class="postbox">
             <h2 class="hndle"><span>🏷️ 2. Sincronização e Nomenclatura de Tags</span></h2>

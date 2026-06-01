@@ -15,17 +15,22 @@ class MWC_Abandoned_Cart {
     }
 
     public function enqueue_checkout_script() {
-        // Removemos a trava do carrinho para que funcione com o YITH e outras listas de cotação.
-        // Se o usuário NÃO estiver logado, o script espião entra em ação para capturar o lead.
-        if ( ! is_user_logged_in() ) {
-            // DICA PRO: Usamos time() no lugar de '1.0.0' para quebrar o cache do navegador à força (Cache Busting)
-            wp_enqueue_script( 'mwc-checkout-capture', MWC_PLUGIN_URL . 'assets/js/checkout-capture.js', ['jquery'], time(), true );
-            wp_localize_script( 'mwc-checkout-capture', 'mwc_ajax', [
-                'url'   => admin_url( 'admin-ajax.php' ),
-                'nonce' => wp_create_nonce( 'mwc_checkout_nonce' )
-            ]);
-        }
+    // Se o usuário NÃO estiver logado, o script de captura entra em ação para capturar o lead.
+    if ( ! is_user_logged_in() ) {
+        $rel_path  = 'assets/js/checkout-capture.js';
+        $file_path = MWC_PLUGIN_DIR . $rel_path;
+
+        // Cache-busting correto: a versão muda só quando o arquivo muda (filemtime),
+        // e cai para MWC_VERSION se o arquivo não for encontrado.
+        $version = file_exists( $file_path ) ? filemtime( $file_path ) : MWC_VERSION;
+
+        wp_enqueue_script( 'mwc-checkout-capture', MWC_PLUGIN_URL . $rel_path, [ 'jquery' ], $version, true );
+        wp_localize_script( 'mwc-checkout-capture', 'mwc_ajax', [
+            'url'   => admin_url( 'admin-ajax.php' ),
+            'nonce' => wp_create_nonce( 'mwc_checkout_nonce' )
+        ] );
     }
+}
 
     public function capture_email() {
         check_ajax_referer( 'mwc_checkout_nonce', 'nonce' );

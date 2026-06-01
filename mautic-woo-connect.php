@@ -25,6 +25,7 @@ if ( file_exists( __DIR__ . '/vendor/autoload.php' ) ) {
 // Define as constantes principais do plugin
 define( 'MWC_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'MWC_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
+define( 'MWC_VERSION', '1.0.0' );
 
 // Declara compatibilidade com HPOS (High-Performance Order Storage) do WooCommerce
 add_action( 'before_woocommerce_init', function () {

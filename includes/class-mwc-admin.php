@@ -13,27 +13,32 @@ class MWC_Admin {
         add_action( 'admin_init', [ $this, 'handle_mautic_authorization' ] );
     }
 
-    /**
-     * Carrega estilos e scripts apenas na nossa página de configurações
-     */
     public function enqueue_admin_assets( $hook ) {
-    if ( $hook !== 'toplevel_page_mwc-settings' ) {
-        return;
+        if ( $hook !== 'toplevel_page_mwc-settings' ) {
+            return;
+        }
+
+        wp_enqueue_style( 'woocommerce_admin_styles', WC()->plugin_url() . '/assets/css/admin.css' );
+        wp_enqueue_script( 'selectWoo' );
+
+        $css_path = MWC_PLUGIN_DIR . 'assets/css/admin.css';
+        $js_path  = MWC_PLUGIN_DIR . 'assets/js/admin.js';
+
+        wp_enqueue_style(
+            'mwc-admin',
+            MWC_PLUGIN_URL . 'assets/css/admin.css',
+            [],
+            file_exists( $css_path ) ? filemtime( $css_path ) : MWC_VERSION
+        );
+
+        wp_enqueue_script(
+            'mwc-admin',
+            MWC_PLUGIN_URL . 'assets/js/admin.js',
+            [ 'jquery', 'selectWoo' ],
+            file_exists( $js_path ) ? filemtime( $js_path ) : MWC_VERSION,
+            true
+        );
     }
-
-    // Select2 (SelectWoo) nativo do WooCommerce
-    wp_enqueue_style( 'woocommerce_admin_styles', WC()->plugin_url() . '/assets/css/admin.css' );
-    wp_enqueue_script( 'selectWoo' );
-
-    // CSS próprio do admin do plugin
-    $css_path = MWC_PLUGIN_DIR . 'assets/css/admin.css';
-    wp_enqueue_style(
-        'mwc-admin',
-        MWC_PLUGIN_URL . 'assets/css/admin.css',
-        [],
-        file_exists( $css_path ) ? filemtime( $css_path ) : MWC_VERSION
-    );
-}
 
     public function add_admin_menu() {
         // String limpa em 1 linha, usando viewBox apropriado e paths preenchidos sem bordas (stroke)
@@ -187,8 +192,6 @@ class MWC_Admin {
                             <?php submit_button( 'Salvar Todas as Configurações', 'primary', 'submit', true, ['style' => 'width:100%; text-align:center; font-size:16px; padding:10px;'] ); ?>
                         </form>
                     </div>
-
-                    <?php $this->render_admin_scripts(); ?>
 
                     <!-- Coluna Lateral: Status e Ferramentas Extra -->
                     <div id="postbox-container-1" class="postbox-container">
@@ -544,99 +547,4 @@ class MWC_Admin {
         return $fields;
     }
 
-    /**
-     * Scripts de interatividade da página
-     */
-    private function render_admin_scripts() {
-        ?>
-        <script type="text/javascript">
-            jQuery(document).ready(function($) {
-                // 1. Inicializa o campo de Status de Pedido para ficar bonito e pesquisável
-                if ( $.fn.selectWoo ) {
-                    $('select[name="mwc_valid_order_statuses[]"]').selectWoo({
-                        placeholder: "Clique para selecionar os status...",
-                        allowClear: true
-                    });
-                }
-
-                // 2. Trava de segurança para o botão de Sincronização em Massa (Bulk Sync)
-                $('input[value="mwc_run_bulk_sync"]').closest('form').on('submit', function(e) {
-                    var confirmacao = confirm('Atenção: Você está prestes a sincronizar todo o histórico da loja para o Mautic. Este processo rodará em segundo plano. Deseja continuar?');
-                    if ( ! confirmacao ) {
-                        e.preventDefault(); // Cancela o envio se o usuário clicar em "Cancelar"
-                    }
-                });
-
-                // --- LÓGICA DO MAPEAMENTO DE CAMPOS (REPEATER) ---
-                
-                // Função para bloquear campos do Mautic já selecionados
-                function updateMauticSelects() {
-                    var selectedFields = [];
-                    // Descobre tudo que está selecionado
-                    $('.mwc-mautic-select').each(function() {
-                        var val = $(this).val();
-                        if ( val !== '' ) {
-                            selectedFields.push(val);
-                        }
-                    });
-
-                    // Varre todos os selects e desabilita os que já estão na lista
-                    $('.mwc-mautic-select').each(function() {
-                        var currentVal = $(this).val();
-                        $(this).find('option').each(function() {
-                            var optionVal = $(this).val();
-                            if ( optionVal !== '' && optionVal !== currentVal && selectedFields.includes(optionVal) ) {
-                                $(this).prop('disabled', true);
-                            } else {
-                                $(this).prop('disabled', false);
-                            }
-                        });
-                    });
-                }
-
-                // Adicionar nova linha
-                $('#mwc-add-row').on('click', function(e) {
-                    e.preventDefault();
-                    var firstRow = $('.mwc-mapping-row').first().clone();
-                    firstRow.find('select').val(''); // Limpa a seleção da nova linha
-                    $('#mwc-mapping-body').append(firstRow);
-                    updateMauticSelects();
-                });
-
-                // Remover linha
-                $(document).on('click', '.mwc-remove-row', function(e) {
-                    e.preventDefault();
-                    if ( $('.mwc-mapping-row').length > 1 ) {
-                        $(this).closest('tr').remove();
-                        updateMauticSelects();
-                    } else {
-                        alert('A última linha não pode ser removida. Apenas deixe em branco se não quiser mapear.');
-                    }
-                });
-
-                // Roda a verificação de duplicadas sempre que o usuário mudar um valor
-                $(document).on('change', '.mwc-mautic-select', updateMauticSelects);
-                
-                // Roda na primeira vez que a página carrega
-                updateMauticSelects();
-
-                // --- INSERIR AQUI A LÓGICA DE ORIGEM ---
-                function toggleOriginFields() {
-                    // Verifica se o checkbox está marcado
-                    if ($('#mwc_enable_auto_origin').is(':checked')) {
-                        $('.mwc-origin-dependent-field').fadeIn('fast');
-                        $('#mwc_auto_origin_label').text('Sim (Detectar do Domínio)');
-                    } else {
-                        $('.mwc-origin-dependent-field').hide();
-                        $('#mwc_auto_origin_label').text('Não (Usar Texto Fixo)');
-                    }
-                }
-                
-                $('#mwc_enable_auto_origin').on('change', toggleOriginFields);
-                toggleOriginFields();
-                // ---------------------------------------
-            });
-        </script>
-        <?php
-    }
 }

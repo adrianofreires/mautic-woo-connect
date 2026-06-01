@@ -21,15 +21,22 @@ class MWC_Webhook {
     /**
      * Trava de Segurança: Só aceita chamadas que tenham o nosso token secreto
      */
-    public function verify_webhook_secret( WP_REST_Request $request ) {
-        $saved_secret   = get_option( 'mwc_webhook_secret' );
-        $request_secret = $request->get_param( 'secret' );
+    public function verify_webhook_secret( $request ) {
+    $saved = (string) get_option( 'mwc_webhook_secret' );
+    $sent  = (string) $request->get_param( 'secret' );
 
-        if ( empty( $saved_secret ) || $saved_secret !== $request_secret ) {
-            return new WP_Error( 'rest_forbidden', 'Acesso negado. Token de Webhook inválido.', [ 'status' => 401 ] );
-        }
-        return true;
+    // Sem secret configurado, recusa por segurança.
+    if ( $saved === '' ) {
+        return new WP_Error( 'rest_forbidden', 'Webhook não configurado.', [ 'status' => 403 ] );
     }
+
+    // Comparação à prova de timing attack.
+    if ( ! hash_equals( $saved, $sent ) ) {
+        return new WP_Error( 'rest_forbidden', 'Token inválido.', [ 'status' => 401 ] );
+    }
+
+    return true;
+}
 
     /**
      * O "Cérebro" dinâmico que processa o aviso enviado pelo Mautic
